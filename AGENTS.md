@@ -23,7 +23,7 @@ This file provides guidance to AI agents working in this repository.
 
 ### Mandatory requirements
 
-- Commit each completed task or stage. Do not push unless requested; this project currently has no GitHub remote and auto-push is disabled.
+- Commit each completed task or stage. Do not push unless requested; auto-push is disabled.
 - For operations expected to take longer than 30 seconds, use a task agent when available. Use parallel task agents for independent long-running operations.
 - For tasks with three or more steps, track the work, use Git checkpoints, and validate the result.
 - Read a file before editing it.
@@ -45,9 +45,9 @@ Do not proceed until these checks have been considered.
 
 ## GitHub and backup workflow
 
-Current status: this project is local-only; repository creation was denied by the current GitHub App permissions. No remote or auto-push hook is configured.
+Current status: the user created https://github.com/RogerLo-52693448/RogerLo-52693448-SICK_3D_LIDAR. This is the origin remote; auto-push is disabled.
 
-- If a GitHub remote is connected later and auto-push remains disabled, commit as usual and push only when the user asks.
+- Commit as usual and push only when the user asks.
 - If the user explicitly enables auto-push in a future setup, configure and verify the agreed post-commit behavior before relying on it.
 - Useful commands:
   - Check auth: `gh auth status`
@@ -82,10 +82,11 @@ At the end of work, stage only intended files, commit, push only when authorized
 - **Models and experiments**: `models/` and `experiments/`; generated artifacts are ignored.
 - The supplied manual describes multiScan270 and the supplied SDK includes multiScan270 test data. Actual firmware compatibility remains unverified.
 - The requested receiver passively captures TCP bytes from `192.168.0.1:2112` by default. This is a CoLa B port, not a verified point-cloud stream. Do not send device commands or change configuration without authorization.
+- The user's Windows connection tests show TCP 2112 unavailable and TCP 2115 reachable. Use `--port 2115` for real-device capture; received scan data has not yet been verified.
 
 ## Development status
 
-- **Setup**: Local project structure and initial Git commit created; GitHub remote unavailable in this session.
+- **Setup**: Project structure and Git history created; origin points to the user-created GitHub repository.
 - **Core features**: Passive, configurable TCP byte capture implemented; Compact decoding and shape reconstruction are not implemented.
 - **Testing**: CLI error handling and TCP capture tests included, with a local TCP server.
 - **Documentation**: Project README and agent guidance included.

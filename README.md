@@ -13,6 +13,20 @@
 
 ## 快速開始
 
+Windows 使用者可在 GitHub 按 **Code → Download ZIP**，解壓縮後，
+在包含 `pyproject.toml` 的資料夾開啟 PowerShell：
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path .\src\main\python).Path
+python -m sick_3d_lidar --host 192.168.0.1 --port 2115 --duration 60
+```
+
+您的實機連線測試顯示 TCP 2115 可連線、2112 無法連線，因此以上明確指定
+`--port 2115`。程式原始預設仍是 2112；可建立連線不代表已確認量測資料輸出。
+需安裝 Python 3.10 或更新版本；以上方式不需要安裝額外套件。
+
+以下為 Linux/macOS 安裝與執行方式：
+
 1. 先閱讀 `AGENTS.md`，並遵循任務前檢查及驗證規則。
 2. 建立虛擬環境並安裝專案：
 
