@@ -80,13 +80,14 @@ At the end of work, stage only intended files, commit, push only when authorized
 - **Tests**: `src/test/`
 - **Data**: `data/`; raw and processed datasets are ignored by Git.
 - **Models and experiments**: `models/` and `experiments/`; generated artifacts are ignored.
-- The exact sensor model, raw-data format, and vehicle-shape representation have not yet been specified. Do not assume formats or fabricate sample measurements.
+- The supplied manual describes multiScan270 and the supplied SDK includes multiScan270 test data. Actual firmware compatibility remains unverified.
+- The requested receiver passively captures TCP bytes from `192.168.0.1:2112` by default. This is a CoLa B port, not a verified point-cloud stream. Do not send device commands or change configuration without authorization.
 
 ## Development status
 
 - **Setup**: Local project structure and initial Git commit created; GitHub remote unavailable in this session.
-- **Core features**: Not implemented; input format and shape representation need to be established first.
-- **Testing**: Unit-test skeleton included.
+- **Core features**: Passive, configurable TCP byte capture implemented; Compact decoding and shape reconstruction are not implemented.
+- **Testing**: CLI error handling and TCP capture tests included, with a local TCP server.
 - **Documentation**: Project README and agent guidance included.
 
 ## Technical debt prevention
@@ -111,7 +112,7 @@ For web or frontend functionality added later, start the development server and 
 
 ## Need help?
 
-Project-specific documentation links have not been added yet. Ask the user to confirm the SICK sensor model, raw-data format, and desired vehicle-shape output before implementing ingestion or reconstruction.
+See README.md for TCP capture usage and limitations. Confirm the actual firmware, scan output configuration, and desired vehicle-shape output before implementing decoding or reconstruction.
 
 ## Common commands
 
