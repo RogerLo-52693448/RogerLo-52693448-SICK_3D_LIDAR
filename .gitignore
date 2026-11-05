@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Build and distribution
+/build/
+/dist/
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Generated outputs and logs
+/output/*
+!/output/.gitkeep
+/logs/*
+!/logs/.gitkeep
+*.log
+
+# Local temporary files
+/tmp/*
+!/tmp/.gitkeep
+/data/temp/*
+!/data/temp/.gitkeep
+
+# Raw and processed datasets can be large or sensitive
+/data/raw/*
+!/data/raw/.gitkeep
+/data/processed/*
+!/data/processed/.gitkeep
+
+# Generated model artifacts and experiment results
+/models/trained/*
+!/models/trained/.gitkeep
+/models/checkpoints/*
+!/models/checkpoints/.gitkeep
+/experiments/results/*
+!/experiments/results/.gitkeep
+/experiments/logs/*
+!/experiments/logs/.gitkeep
+.ipynb_checkpoints/
