@@ -15,13 +15,13 @@ from sick_3d_lidar.core.compact import (
 
 def telegram(
     rows=2, columns=2, echoes=2, flags=7, distances=None, intensities=None,
-    sequence=1, ambient_rows=1,
+    sequence=1, ambient_rows=1, frame=123, timestamp_us=456,
 ) -> bytes:
     samples = rows * columns * echoes
     distances = distances if distances is not None else [1000] * samples
     intensities = intensities if intensities is not None else list(range(samples))
     metadata = META.pack(
-        123, 456, 0, 1, columns, columns, rows, echoes, ambient_rows, 1, 0,
+        frame, timestamp_us, 0, 1, columns, columns, rows, echoes, ambient_rows, 1, 0,
         12, 2.0, flags,
     ) + bytes(91)
     elevations = [0.0, math.pi / 2][:rows]

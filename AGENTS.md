@@ -87,8 +87,9 @@ At the end of work, stage only intended files, commit, push only when authorized
 ## Development status
 
 - **Setup**: Project structure and Git history created; origin points to the user-created GitHub repository.
-- **Core features**: Passive TCP capture and offline Compact type 6/version 1 decoding to XYZ/intensity binary PCD implemented. Each segment is exported separately; zero distances are excluded. Shape reconstruction is not implemented.
-- **Testing**: CLI, TCP capture, Compact validation, XYZ conversion, packed intensity, and PCD tests included. Conversion was exercised on the supplied capture and vendor Type 6 samples.
+- **Core features**: Passive TCP capture, offline Compact type 6/version 1 conversion, and fixed-sensor live foreground clustering/tracking implemented. Detection assembles complete frames, warms all interlace phases, and saves each confirmed track's highest-point observation after departure. Shutdown exports are explicitly marked partial. No vehicle classification or full shape reconstruction.
+- **Dependencies**: NumPy accelerates shared decoding. Install `.[detect]` for SciPy-based detection. Keep raw capture and offline conversion usable without the detection extra.
+- **Testing**: CLI, TCP capture, Compact validation, XYZ conversion, packed intensity, PCD, background subtraction, tracking, and local TCP streaming tests included.
 - **Documentation**: Project README and agent guidance included.
 
 ## Technical debt prevention
@@ -106,6 +107,7 @@ Before creating a file:
 For this AI/ML project, run the training or inference pipeline once with sample data from `data/` after it exists; confirm there are no errors, outputs are reasonable, and expected metrics appear under `experiments/results/`. Do not invent or commit sensor data. Run tests with:
 
 ```bash
+python -m pip install -e ".[detect]"
 PYTHONPATH=src/main/python python -m unittest discover -s src/test
 ```
 
@@ -121,6 +123,7 @@ See README.md for TCP capture usage and limitations. Confirm the actual firmware
 python -m pip install -e .
 PYTHONPATH=src/main/python python -m sick_3d_lidar
 PYTHONPATH=src/main/python python -m sick_3d_lidar convert output/capture.bin --output-dir output/pcd --allow-truncated-tail
+PYTHONPATH=src/main/python python -m sick_3d_lidar detect --host 192.168.0.1 --port 2115
 PYTHONPATH=src/main/python python -m unittest discover -s src/test
 git status
 ```

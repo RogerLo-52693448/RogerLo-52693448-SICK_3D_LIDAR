@@ -8,6 +8,8 @@ import struct
 from typing import Iterator
 import zlib
 
+import numpy as np
+
 
 logger = logging.getLogger(__name__)
 HEADER = struct.Struct("<IIQQIII")
@@ -30,6 +32,8 @@ class Segment:
     interlace_index: int
     points: bytes
     zero_distances: int
+    frame_columns: int = 0
+    scan_configuration: int = 0
 
 
 def decode_type6(telegram: bytes) -> Segment:
@@ -46,7 +50,7 @@ def decode_type6(telegram: bytes) -> Segment:
 
     (
         frame, timestamp, index, segments, columns, frame_columns, rows, echoes,
-        ambient_rows, interlace_steps, interlace_index, _, scale, flags,
+        ambient_rows, interlace_steps, interlace_index, scan_configuration, scale, flags,
     ) = META.unpack_from(telegram, HEADER.size)
     if not segments or index >= segments or columns > frame_columns:
         raise ValueError("Invalid segment dimensions or index.")
@@ -73,39 +77,91 @@ def decode_type6(telegram: bytes) -> Segment:
     if not all(math.isfinite(angle) for angle in (*elevations, *azimuths)):
         raise ValueError(f"Non-finite geometry in telegram {sequence}.")
     distance_start = geometry_start + geometry_size
-    distances = struct.unpack_from(f"<{samples}H", telegram, distance_start)
+    distances = np.frombuffer(telegram, dtype="<u2", count=samples, offset=distance_start)
     intensity_start = distance_start + samples * 2
-    row_trig = [(math.cos(angle), math.sin(angle)) for angle in elevations]
-    column_trig = [(math.cos(angle), math.sin(angle)) for angle in azimuths]
-    points = bytearray()
-    zeros = 0
-    # Match the vendor converter's row/column/echo ordering and negative Z sign.
-    for row, (cos_elevation, sin_elevation) in enumerate(row_trig):
-        for column, (cos_azimuth, sin_azimuth) in enumerate(column_trig):
-            for echo in range(echoes):
-                sample = echo * columns * rows + column * rows + row
-                raw_distance = distances[sample]
-                if raw_distance == 0:
-                    zeros += 1
-                    continue
-                distance = raw_distance * scale / 1000.0
-                if distance > 3.4028234663852886e38:
-                    raise ValueError("Scaled distance exceeds the PCD float32 range.")
-                intensity = math.nan
-                if flags & 1:
-                    position = intensity_start + sample * 12 // 8
-                    pair = telegram[position] | (telegram[position + 1] << 8)
-                    intensity = ((pair >> (4 if sample % 2 else 0)) & 4095) / 4095
-                points.extend(POINT.pack(
-                    distance * cos_elevation * cos_azimuth,
-                    distance * cos_elevation * sin_azimuth,
-                    -distance * sin_elevation,
-                    intensity,
-                ))
+    # Wire order is echo/column/row; match the vendor's row/column/echo output.
+    ranges = (distances.astype(np.float64) * scale / 1000).reshape(
+        echoes, columns, rows,
+    ).transpose(2, 1, 0)
+    if np.any(ranges > np.finfo(np.float32).max):
+        raise ValueError("Scaled distance exceeds the PCD float32 range.")
+    elevation = np.asarray(elevations)[:, None, None]
+    azimuth = np.asarray(azimuths)[None, :, None]
+    points = np.empty((rows, columns, echoes, 4), dtype="<f4")
+    points[..., 0] = ranges * np.cos(elevation) * np.cos(azimuth)
+    points[..., 1] = ranges * np.cos(elevation) * np.sin(azimuth)
+    points[..., 2] = -ranges * np.sin(elevation)
+    points[..., 3] = np.nan
+    if flags & 1:
+        packed = np.frombuffer(
+            telegram, dtype=np.uint8, count=intensity_size, offset=intensity_start,
+        )
+        positions = np.arange(samples) * 12 // 8
+        pairs = packed[positions].astype(np.uint16) | (
+            packed[positions + 1].astype(np.uint16) << 8
+        )
+        intensities = ((pairs >> ((np.arange(samples) % 2) * 4)) & 4095) / 4095
+        points[..., 3] = intensities.reshape(echoes, columns, rows).transpose(2, 1, 0)
+    valid = ranges != 0
+    zeros = samples - int(np.count_nonzero(valid))
     return Segment(
         sequence, serial, frame, timestamp, index, segments, columns, rows,
-        echoes, interlace_steps, interlace_index, bytes(points), zeros,
+        echoes, interlace_steps, interlace_index, points[valid].tobytes(), zeros,
+        frame_columns, scan_configuration,
     )
+
+
+def type6_size(header: bytes) -> int:
+    start, kind, _, _, version, length, _ = HEADER.unpack(header)
+    if (start, kind, version) != (0x02020202, 6, 1):
+        raise ValueError("Only Compact type 6/version 1 is supported.")
+    if length < META.size + 91:
+        raise ValueError("Invalid Type 6 payload length.")
+    return HEADER.size + length + 4
+
+
+class TelegramStream:
+    """Reassemble TCP chunks without assuming receive boundaries are telegrams."""
+
+    def __init__(self, max_size: int = 16 * 1024 * 1024):
+        self.buffer = bytearray()
+        self.max_size = max_size
+
+    def feed(self, chunk: bytes) -> Iterator[bytes]:
+        self.buffer.extend(chunk)
+        while len(self.buffer) >= HEADER.size:
+            size = type6_size(self.buffer[:HEADER.size])
+            if size > self.max_size:
+                raise ValueError(f"Telegram exceeds the {self.max_size}-byte stream limit.")
+            if len(self.buffer) < size:
+                break
+            telegram = bytes(self.buffer[:size])
+            del self.buffer[:size]
+            yield telegram
+
+    def finish(self, allow_truncated_tail: bool = False) -> None:
+        if self.buffer:
+            if not allow_truncated_tail:
+                raise ValueError("Truncated telegram at end of TCP stream.")
+            logger.warning("Skipping %s trailing TCP bytes", len(self.buffer))
+
+
+def write_pcd(path: Path, points: bytes, comments: tuple[str, ...] = ()) -> int:
+    if len(points) % POINT.size:
+        raise ValueError("Invalid XYZ/intensity point buffer size.")
+    count = len(points) // POINT.size
+    header = (
+        "# .PCD v0.7 - Point Cloud Data file format\n"
+        + "".join(f"# {comment}\n" for comment in comments)
+        + "VERSION 0.7\nFIELDS x y z intensity\n"
+        "SIZE 4 4 4 4\nTYPE F F F F\nCOUNT 1 1 1 1\n"
+        f"WIDTH {count}\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\n"
+        f"POINTS {count}\nDATA binary\n"
+    )
+    with path.open("xb") as output:
+        output.write(header.encode("ascii"))
+        output.write(points)
+    return count
 
 
 def read_segments(
@@ -121,12 +177,11 @@ def read_segments(
                     logger.warning("Skipping truncated header at byte %s", offset)
                     return
                 raise ValueError(f"Truncated header at byte {offset}.")
-            start, kind, _, _, version, length, _ = HEADER.unpack(header)
-            if (start, kind, version) != (0x02020202, 6, 1):
-                raise ValueError(f"Unsupported Compact header at byte {offset}.")
-            if length < META.size + 91:
-                raise ValueError(f"Invalid payload length at byte {offset}.")
-            if length + 4 > total - stream.tell():
+            try:
+                remaining = type6_size(header) - HEADER.size
+            except ValueError as error:
+                raise ValueError(f"Unsupported Compact header at byte {offset}: {error}") from error
+            if remaining > total - stream.tell():
                 if allow_truncated_tail:
                     logger.warning(
                         "Skipping truncated telegram at byte %s (%s bytes remain)",
@@ -134,7 +189,7 @@ def read_segments(
                     )
                     return
                 raise ValueError(f"Truncated telegram at byte {offset}.")
-            yield decode_type6(header + stream.read(length + 4))
+            yield decode_type6(header + stream.read(remaining))
 
 
 def convert_capture(
@@ -157,20 +212,12 @@ def convert_capture(
             f"sensor_{segment.serial}_frame_{segment.frame}"
             f"_segment_{segment.index}_telegram_{segment.sequence}.pcd"
         )
-        header = (
-            "# .PCD v0.7 - Point Cloud Data file format\n"
-            f"# frame_timestamp_us {segment.timestamp_us}\n"
-            f"# segment {segment.index}/{segment.segments_per_frame}\n"
-            f"# interlace {segment.interlace_index}/{segment.interlace_steps}\n"
-            f"# zero_distances_excluded {segment.zero_distances}\n"
-            "VERSION 0.7\nFIELDS x y z intensity\n"
-            "SIZE 4 4 4 4\nTYPE F F F F\nCOUNT 1 1 1 1\n"
-            f"WIDTH {points}\nHEIGHT 1\nVIEWPOINT 0 0 0 1 0 0 0\n"
-            f"POINTS {points}\nDATA binary\n"
-        )
-        with (output_dir / name).open("xb") as output:
-            output.write(header.encode("ascii"))
-            output.write(segment.points)
+        write_pcd(output_dir / name, segment.points, (
+            f"frame_timestamp_us {segment.timestamp_us}",
+            f"segment {segment.index}/{segment.segments_per_frame}",
+            f"interlace {segment.interlace_index}/{segment.interlace_steps}",
+            f"zero_distances_excluded {segment.zero_distances}",
+        ))
         count += 1
         point_count += points
         previous = segment
