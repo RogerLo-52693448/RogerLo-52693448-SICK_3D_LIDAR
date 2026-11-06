@@ -1,7 +1,7 @@
 # AGENTS.md - SICK_3D_LIDAR
 
 > **Documentation Version**: 1.0  
-> **Last Updated**: 2026-11-05  
+> **Last Updated**: 2026-11-06
 > **Project**: SICK_3D_LIDAR  
 > **Description**: Receive and analyze SICK 3D LiDAR raw data, then transform it into vehicle shapes.
 
@@ -82,13 +82,13 @@ At the end of work, stage only intended files, commit, push only when authorized
 - **Models and experiments**: `models/` and `experiments/`; generated artifacts are ignored.
 - The supplied manual describes multiScan270 and the supplied SDK includes multiScan270 test data. Actual firmware compatibility remains unverified.
 - The requested receiver passively captures TCP bytes from `192.168.0.1:2112` by default. This is a CoLa B port, not a verified point-cloud stream. Do not send device commands or change configuration without authorization.
-- The user's Windows connection tests show TCP 2112 unavailable and TCP 2115 reachable. Use `--port 2115` for real-device capture; received scan data has not yet been verified.
+- The user's Windows connection tests show TCP 2112 unavailable and TCP 2115 reachable. Use `--port 2115` for real-device capture. The supplied capture contains CRC-validated Compact type 6/version 1 telegrams.
 
 ## Development status
 
 - **Setup**: Project structure and Git history created; origin points to the user-created GitHub repository.
-- **Core features**: Passive, configurable TCP byte capture implemented; Compact decoding and shape reconstruction are not implemented.
-- **Testing**: CLI error handling and TCP capture tests included, with a local TCP server.
+- **Core features**: Passive TCP capture and offline Compact type 6/version 1 decoding to XYZ/intensity binary PCD implemented. Each segment is exported separately; zero distances are excluded. Shape reconstruction is not implemented.
+- **Testing**: CLI, TCP capture, Compact validation, XYZ conversion, packed intensity, and PCD tests included. Conversion was exercised on the supplied capture and vendor Type 6 samples.
 - **Documentation**: Project README and agent guidance included.
 
 ## Technical debt prevention
@@ -120,6 +120,7 @@ See README.md for TCP capture usage and limitations. Confirm the actual firmware
 ```bash
 python -m pip install -e .
 PYTHONPATH=src/main/python python -m sick_3d_lidar
+PYTHONPATH=src/main/python python -m sick_3d_lidar convert output/capture.bin --output-dir output/pcd --allow-truncated-tail
 PYTHONPATH=src/main/python python -m unittest discover -s src/test
 git status
 ```

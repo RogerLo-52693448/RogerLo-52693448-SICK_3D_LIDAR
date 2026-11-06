@@ -7,6 +7,34 @@ from pathlib import Path
 import sys
 
 from sick_3d_lidar.services.receiver import capture_tcp
+from sick_3d_lidar.core.compact import convert_capture
+
+
+def convert_main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(
+        description="Convert Compact type 6/version 1 captures to binary PCD."
+    )
+    parser.add_argument("input", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--allow-truncated-tail", action="store_true",
+        help="Warn and skip only an incomplete final telegram.",
+    )
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    try:
+        files, points = convert_capture(
+            args.input, args.output_dir, args.allow_truncated_tail,
+        )
+    except (OSError, ValueError) as error:
+        print(
+            f"Conversion failed: {error} "
+            f"Any already-written PCD files remain in {args.output_dir}.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"Converted {files} segments, {points} points to {args.output_dir}.")
+    return 0
 
 
 def positive_seconds(value: str) -> float:
@@ -24,6 +52,9 @@ def tcp_port(value: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "convert":
+        return convert_main(argv[1:])
     parser = argparse.ArgumentParser(
         description="Passively capture TCP bytes; does not request or decode scan data."
     )
